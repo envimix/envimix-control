@@ -20,17 +20,15 @@ ghcr.io/envimix/envimix-control:<version>
 
 ## Docker setup
 
-The container must be able to reach the GBXRemote endpoint. On a Linux host where
-GBXRemote listens on the host network, an example is:
+The container must be able to reach the server's XML-RPC.
 
 ```sh
-docker run --rm --network host \
+docker run -d \
+  -e EMC_SERVER_IP=envimix \
+  -e EMC_SERVER_PORT=5000 \
   -e EMC_CONTROLLER_CODE=your-controller-code \
-  envimix/envimix-control:<version>
+  envimix/envimix-control:latest
 ```
-
-Use `EMC_SERVER_IP` and `EMC_SERVER_PORT` when GBXRemote is not available at
-`127.0.0.1:5000` from inside the container.
 
 ## Environment variables
 
