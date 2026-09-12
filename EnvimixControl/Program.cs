@@ -1,7 +1,21 @@
 ﻿using ManiaAPI.XmlRpc;
 using TmEssentials;
+using System.Runtime.InteropServices;
 
 using var http = new HttpClient();
+using var shutdown = new CancellationTokenSource();
+using var sigintRegistration = OperatingSystem.IsWindows()
+    ? null
+    : PosixSignalRegistration.Create(PosixSignal.SIGINT, _ => shutdown.Cancel());
+using var sigtermRegistration = OperatingSystem.IsWindows()
+    ? null
+    : PosixSignalRegistration.Create(PosixSignal.SIGTERM, _ => shutdown.Cancel());
+
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    eventArgs.Cancel = true;
+    shutdown.Cancel();
+};
 
 const string DefaultServerIp = "127.0.0.1";
 const ushort DefaultServerPort = 5000;
@@ -157,7 +171,15 @@ client.On("TrackMania.EndRace", async (methodParameters, cancellationToken) =>
 });
 
 Console.WriteLine("Ready.");
-await client.WaitForCloseAsync();
+
+try
+{
+    await client.WaitForCloseAsync(shutdown.Token);
+}
+catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+{
+    Console.WriteLine("Shutdown signal received.");
+}
 
 return 0;
 
