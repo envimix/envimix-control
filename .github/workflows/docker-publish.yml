@@ -42,7 +42,7 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository }}
-            envimix/envimix-control
+            ${{ vars.DOCKERHUB_USERNAME }}/envimix-control
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -91,4 +91,4 @@ jobs:
             --header "Authorization: JWT $jwt" \
             --header "Content-Type: application/json" \
             --data-binary @/tmp/dockerhub-description.json \
-            https://hub.docker.com/v2/repositories/envimix/envimix-control/
+            https://hub.docker.com/v2/repositories/${{ vars.DOCKERHUB_USERNAME }}/envimix-control/

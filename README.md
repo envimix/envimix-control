@@ -14,7 +14,7 @@ The controller authenticates with GBXRemote, enables Envimania session recording
 Version tags are published for `linux/amd64` and `linux/arm64` to both registries:
 
 ```text
-envimix/envimix-control:<version>
+bigbang1112/envimix-control:<version>
 ghcr.io/envimix/envimix-control:<version>
 ```
 
