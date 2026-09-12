@@ -122,8 +122,13 @@ client.On("TrackMania.EndRace", async (methodParameters, cancellationToken) =>
 
     await client.CallAsync("SaveCurrentReplay", [replayName], cancellationToken);
 
-    var gameDataDir = await client.CallAsync<string>("GameDataDirectory", cancellationToken);
-    var replayPath = Path.Combine(gameDataDir, "Replays", serverName, "Autosaves", $"{replayName}.Replay.Gbx");
+    var replayPath = Path.Combine("UserData", "Replays", serverName, "Autosaves", $"{replayName}.Replay.Gbx");
+
+    if (!File.Exists(replayPath))
+    {
+        var gameDataDir = await client.CallAsync<string>("GameDataDirectory", cancellationToken);
+        replayPath = Path.Combine(gameDataDir, "Replays", serverName, "Autosaves", $"{replayName}.Replay.Gbx");
+    }
 
     Console.WriteLine($"Submitting session replay '{replayPath}'.");
     await using var replay = File.OpenRead(replayPath);
