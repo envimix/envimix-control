@@ -94,7 +94,7 @@ client.On("TrackMania.PlayerFinish", async (methodParameters, cancellationToken)
     }
     else
     {
-        Console.WriteLine($"No best ghost replay available for '{login}'.");
+        Console.Error.WriteLine($"No best ghost replay available for '{login}': {saveBestGhostsReplayResult.FaultCode} {saveBestGhostsReplayResult.FaultString} - returned value: {saveBestGhostsReplayResult.Value}");
     }
 
     var getValidationReplayResult = results.ElementAt(1);
@@ -106,7 +106,7 @@ client.On("TrackMania.PlayerFinish", async (methodParameters, cancellationToken)
     }
     else
     {
-        Console.WriteLine($"No validation replay available for '{login}'.");
+        Console.Error.WriteLine($"No validation replay available for '{login}': {getValidationReplayResult.FaultCode} {getValidationReplayResult.FaultString} - returned value: {getValidationReplayResult.Value}");
     }
 
     Console.WriteLine($"Submitting {submissionTasks.Count} replay(s) for '{login}' in parallel.");
@@ -120,7 +120,13 @@ client.On("TrackMania.EndRace", async (methodParameters, cancellationToken) =>
     var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var replayName = Path.Combine("EnvimixControl", "Sessions", $"{timestamp}_{Guid.NewGuid()}");
 
-    await client.CallAsync("SaveCurrentReplay", [replayName], cancellationToken);
+    var success = await client.CallAsync<bool>("SaveCurrentReplay", [replayName], cancellationToken);
+
+    if (!success)
+    {
+        Console.Error.WriteLine($"Failed to save session replay '{replayName}', call returned '{success}'.");
+        return;
+    }
 
     var replayPath = Path.Combine("UserData", "Replays", serverName, "Autosaves", $"{replayName}.Replay.Gbx");
 
