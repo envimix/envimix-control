@@ -49,8 +49,6 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
             ${{ vars.DOCKERHUB_USERNAME }}/envimix-control
-          flavor: |
-            suffix=-${{ matrix.architecture }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -58,14 +56,27 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and publish Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: EnvimixControl
           file: EnvimixControl/Dockerfile
           platforms: linux/${{ matrix.architecture }}
-          push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+          outputs: |
+            type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+            type=image,name=${{ vars.DOCKERHUB_USERNAME }}/envimix-control,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export image digest
+        run: echo "${{ steps.build.outputs.digest }}" > "${{ runner.temp }}/digest"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/digest
+          retention-days: 1
 
   create-manifests:
     name: Create multi-architecture manifests
@@ -75,6 +86,12 @@ jobs:
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Download image digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -106,11 +123,19 @@ jobs:
         env:
           TAGS: ${{ steps.metadata.outputs.tags }}
         run: |
+          digests=()
+          while IFS= read -r digest; do
+            digests+=("$digest")
+          done < <(find "${{ runner.temp }}/digests" -type f -name digest -exec cat {} \;)
+
+          test "${#digests[@]}" -eq 2
+
           while IFS= read -r tag; do
+            repository="${tag%:*}"
             docker buildx imagetools create \
               --tag "$tag" \
-              "${tag}-amd64" \
-              "${tag}-arm64"
+              "${repository}@${digests[0]}" \
+              "${repository}@${digests[1]}"
           done <<< "$TAGS"
 
   update-dockerhub-description:
