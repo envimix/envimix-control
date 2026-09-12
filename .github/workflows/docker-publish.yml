@@ -62,7 +62,6 @@ jobs:
           context: EnvimixControl
           file: EnvimixControl/Dockerfile
           platforms: linux/${{ matrix.architecture }}
-          tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           outputs: |
             type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
