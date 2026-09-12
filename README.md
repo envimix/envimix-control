@@ -1,9 +1,9 @@
-# EnvimixControl
+# Envimix Control
 
 [![CI](https://github.com/envimix/envimix-control/actions/workflows/ci.yml/badge.svg)](https://github.com/envimix/envimix-control/actions/workflows/ci.yml)
 [![Docker image](https://img.shields.io/docker/v/envimix/envimix-control?label=Docker%20Hub)](https://hub.docker.com/r/envimix/envimix-control)
 
-EnvimixControl connects via GBXRemote to a Trackmania 2 ENVIMIX server and submits player best ghosts, validation replays, and Envimania session replays to online services.
+Envimix Control connects via GBXRemote to a Trackmania 2 ENVIMIX server and submits player best ghosts, validation replays, and Envimania session replays to online services.
 
 ## How it works
 
