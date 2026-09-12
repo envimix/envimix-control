@@ -33,7 +33,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract Docker metadata
@@ -58,3 +58,37 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+
+  update-dockerhub-description:
+    name: Update Docker Hub description
+    needs: publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Update Docker Hub description
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          login_payload=$(jq -n \
+            --arg username "$DOCKERHUB_USERNAME" \
+            --arg password "$DOCKERHUB_TOKEN" \
+            '{ username: $username, password: $password }')
+
+          jwt=$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --data "$login_payload" \
+            https://hub.docker.com/v2/users/login/ | jq --exit-status --raw-output '.token')
+
+          jq -n --rawfile description README.md \
+            '{ full_description: $description }' > /tmp/dockerhub-description.json
+
+          curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --header "Authorization: JWT $jwt" \
+            --header "Content-Type: application/json" \
+            --data-binary @/tmp/dockerhub-description.json \
+            https://hub.docker.com/v2/repositories/envimix/envimix-control/
