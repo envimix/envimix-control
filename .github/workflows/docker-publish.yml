@@ -1,149 +1,89 @@
-name: Publish Docker image
+name: Docker Image Publish
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: ["main", "dev"]
+    paths:
+      - ".github/workflows/docker-publish.yml"
+      - "README.md"
+      - "EnvimixControl/Dockerfile"
+      - "EnvimixControl/**"
+  pull_request:
+    branches: ["main", "dev"]
+    paths:
+      - ".github/workflows/docker-publish.yml"
+      - "README.md"
+      - "EnvimixControl/Dockerfile"
+      - "EnvimixControl/**"
+  schedule:
+    - cron: "0 5 */7 * *"
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
 
+env:
+  IMAGE_NAME: envimix-control
+
 jobs:
-  publish:
+  build-and-push:
+    name: Build & Push
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            architecture: amd64
-          - runner: ubuntu-24.04-arm
-            architecture: arm64
-
-    runs-on: ${{ matrix.runner }}
+          - dockerfile: EnvimixControl/Dockerfile
+            platforms: linux/amd64,linux/arm64
+            tags: |
+              type=raw,value=latest
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: ${{ matrix.tags }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: metadata
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-            ${{ vars.DOCKERHUB_USERNAME }}/envimix-control
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and publish Docker image
-        id: build
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: EnvimixControl
-          file: EnvimixControl/Dockerfile
-          platforms: linux/${{ matrix.architecture }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          outputs: |
-            type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
-            type=image,name=${{ vars.DOCKERHUB_USERNAME }}/envimix-control,push-by-digest=true,name-canonical=true,push=true
-
-      - name: Export image digest
-        run: echo "${{ steps.build.outputs.digest }}" > "${{ runner.temp }}/digest"
-
-      - name: Upload image digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: digest-${{ matrix.architecture }}
-          path: ${{ runner.temp }}/digest
-          retention-days: 1
-
-  create-manifests:
-    name: Create multi-architecture manifests
-    needs: publish
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Download image digests
-        uses: actions/download-artifact@v4
-        with:
-          pattern: digest-*
-          path: ${{ runner.temp }}/digests
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract Docker metadata
-        id: metadata
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-            ${{ vars.DOCKERHUB_USERNAME }}/envimix-control
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Create and publish manifests
-        env:
-          TAGS: ${{ steps.metadata.outputs.tags }}
-        run: |
-          digests=()
-          while IFS= read -r digest; do
-            digests+=("$digest")
-          done < <(find "${{ runner.temp }}/digests" -type f -name digest -exec cat {} \;)
-
-          test "${#digests[@]}" -eq 2
-
-          while IFS= read -r tag; do
-            repository="${tag%:*}"
-            docker buildx imagetools create \
-              --tag "$tag" \
-              "${repository}@${digests[0]}" \
-              "${repository}@${digests[1]}"
-          done <<< "$TAGS"
+          platforms: ${{ matrix.platforms }}
+          file: ${{ matrix.dockerfile }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          push: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   update-dockerhub-description:
-    name: Update Docker Hub description
-    needs: create-manifests
+    name: Update Docker Hub Description
+    needs: build-and-push
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Update Docker Hub description
         env:
@@ -169,4 +109,4 @@ jobs:
             --header "Authorization: JWT $jwt" \
             --header "Content-Type: application/json" \
             --data-binary @/tmp/dockerhub-description.json \
-            https://hub.docker.com/v2/repositories/${{ vars.DOCKERHUB_USERNAME }}/envimix-control/
+            "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/$IMAGE_NAME/"
