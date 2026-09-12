@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET: EnvimixControl",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build EnvimixControl",
+      "program": "${workspaceFolder}/EnvimixControl/bin/Debug/net10.0/EnvimixControl.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/EnvimixControl",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "EMC_SERVER_IP": "127.0.0.1",
+        "EMC_SERVER_PORT": "5000",
+        "EMC_CONTROLLER_CODE": ""
+      }
+    }
+  ]
+}

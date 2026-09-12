@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build EnvimixControl",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/EnvimixControl/EnvimixControl.csproj",
+        "-c",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "watch EnvimixControl",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "run",
+        "--project",
+        "${workspaceFolder}/EnvimixControl/EnvimixControl.csproj"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/EnvimixControl",
+        "env": {
+          "EMC_SERVER_IP": "127.0.0.1",
+          "EMC_SERVER_PORT": "5000"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}
