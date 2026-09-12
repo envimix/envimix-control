@@ -52,7 +52,7 @@ var controllerCode = Environment.GetEnvironmentVariable("EMC_CONTROLLER_CODE");
 
 if (controllerCode is null or { Length: 0 })
 {
-    Console.Error.WriteLine($"EMC_CONTROLLER_CODE is not set. Generate a controller code at: https://envimix.gbx.tools/envimania/servers/{serverLogin}#server-actions");
+    Console.WriteLine($"EMC_CONTROLLER_CODE is not set. Generate a controller code at: https://envimix.gbx.tools/envimania/servers/{serverLogin}#server-actions");
     return 1;
 }
 
@@ -108,7 +108,7 @@ client.On("TrackMania.PlayerFinish", async (methodParameters, cancellationToken)
     }
     else
     {
-        Console.Error.WriteLine($"No best ghost replay available for '{login}': {saveBestGhostsReplayResult.FaultCode} {saveBestGhostsReplayResult.FaultString} - returned value: {saveBestGhostsReplayResult.Value}");
+        Console.WriteLine($"No best ghost replay available for '{login}': {saveBestGhostsReplayResult.FaultCode} {saveBestGhostsReplayResult.FaultString} - returned value: {saveBestGhostsReplayResult.Value}");
     }
 
     var getValidationReplayResult = results.ElementAt(1);
@@ -120,7 +120,7 @@ client.On("TrackMania.PlayerFinish", async (methodParameters, cancellationToken)
     }
     else
     {
-        Console.Error.WriteLine($"No validation replay available for '{login}': {getValidationReplayResult.FaultCode} {getValidationReplayResult.FaultString} - returned value: {getValidationReplayResult.Value}");
+        Console.WriteLine($"No validation replay available for '{login}': {getValidationReplayResult.FaultCode} {getValidationReplayResult.FaultString} - returned value: {getValidationReplayResult.Value}");
     }
 
     Console.WriteLine($"Submitting {submissionTasks.Count} replay(s) for '{login}' in parallel.");
@@ -138,7 +138,7 @@ client.On("TrackMania.EndRace", async (methodParameters, cancellationToken) =>
 
     if (!success)
     {
-        Console.Error.WriteLine($"Failed to save session replay '{replayName}', call returned '{success}'.");
+        Console.WriteLine($"Failed to save session replay '{replayName}', call returned '{success}'.");
         return;
     }
 
@@ -166,7 +166,7 @@ client.On("TrackMania.EndRace", async (methodParameters, cancellationToken) =>
     }
     else
     {
-        Console.Error.WriteLine($"Unable to submit session replay, keeping '{replayPath}'.");
+        Console.WriteLine($"Unable to submit session replay, keeping '{replayPath}'.");
     }
 });
 
@@ -201,7 +201,7 @@ async Task SubmitBestGhostsReplayAsync(string replayPath, CancellationToken canc
     }
     else
     {
-        Console.Error.WriteLine($"Unable to submit best ghost replay, keeping '{replayPath}'.");
+        Console.WriteLine($"Unable to submit best ghost replay, keeping '{replayPath}'.");
     }
 }
 
@@ -241,6 +241,6 @@ async Task<bool> SubmitFileAsync(
     }
 
     var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-    Console.Error.WriteLine($"Unable to submit '{fileName}' to {endpoint}: HTTP {(int)response.StatusCode} {responseBody}");
+    Console.WriteLine($"Unable to submit '{fileName}' to {endpoint}: HTTP {(int)response.StatusCode} {responseBody}");
     return false;
 }
