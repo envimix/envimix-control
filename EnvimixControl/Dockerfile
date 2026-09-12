@@ -1,9 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine-aot AS build
+ARG TARGETARCH
 WORKDIR /src
 
 COPY EnvimixControl.csproj ./
-ARG TARGETARCH
-RUN dotnet restore -r linux-musl-$TARGETARCH
+RUN dotnet restore -a $TARGETARCH
 
 COPY . ./
 RUN dotnet publish --no-restore -a $TARGETARCH --self-contained -o /app/publish

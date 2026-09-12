@@ -1,22 +1,9 @@
-name: Docker Image Publish
+name: Publish Docker image
 
 on:
   push:
-    branches: ["main", "dev"]
-    paths:
-      - ".github/workflows/docker-publish.yml"
-      - "README.md"
-      - "EnvimixControl/Dockerfile"
-      - "EnvimixControl/**"
-  pull_request:
-    branches: ["main", "dev"]
-    paths:
-      - ".github/workflows/docker-publish.yml"
-      - "README.md"
-      - "EnvimixControl/Dockerfile"
-      - "EnvimixControl/**"
-  schedule:
-    - cron: "0 5 */7 * *"
+    tags:
+      - "*"
   workflow_dispatch:
 
 permissions:
@@ -24,89 +11,152 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: envimix-control
+  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/envimix-control
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  build-and-push:
-    name: Build & Push
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - dockerfile: EnvimixControl/Dockerfile
-            platforms: linux/amd64,linux/arm64
-            tags: |
-              type=raw,value=latest
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            artifact: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            artifact: arm64
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
-          images: ${{ vars.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
-          tags: ${{ matrix.tags }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCERHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: EnvimixControl
-          platforms: ${{ matrix.platforms }}
-          file: ${{ matrix.dockerfile }}
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ steps.meta.outputs.tags }}
-          push: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          file: EnvimixControl/Dockerfile
+          platforms: ${{ matrix.platform }}
+          tags: |
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.artifact }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.artifact }}
 
-  update-dockerhub-description:
-    name: Update Docker Hub Description
-    needs: build-and-push
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          touch "${{ runner.temp }}/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish multi-architecture manifests
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
 
-      - name: Update Docker Hub description
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Hub tags
+        id: dockerhub-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - name: GHCR tags
+        id: ghcr-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - name: Create Docker Hub manifest
         env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          IMAGE: ${{ env.DOCKERHUB_IMAGE }}
+          TAGS: ${{ steps.dockerhub-meta.outputs.tags }}
+          DIGEST_DIR: ${{ runner.temp }}/digests
         run: |
-          login_payload=$(jq -n \
-            --arg username "$DOCKERHUB_USERNAME" \
-            --arg password "$DOCKERHUB_TOKEN" \
-            '{ username: $username, password: $password }')
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && tag_args+=("-t" "$tag")
+          done <<< "$TAGS"
 
-          jwt=$(curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Content-Type: application/json" \
-            --data "$login_payload" \
-            https://hub.docker.com/v2/users/login/ | jq --exit-status --raw-output '.token')
+          digest_args=()
+          for digest in "$DIGEST_DIR"/*; do
+            digest_args+=("$IMAGE@sha256:$(basename "$digest")")
+          done
 
-          jq -n --rawfile description README.md \
-            '{ full_description: $description }' > /tmp/dockerhub-description.json
+          docker buildx imagetools create "${tag_args[@]}" "${digest_args[@]}"
 
-          curl --fail-with-body --silent --show-error \
-            --request PATCH \
-            --header "Authorization: JWT $jwt" \
-            --header "Content-Type: application/json" \
-            --data-binary @/tmp/dockerhub-description.json \
-            "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/$IMAGE_NAME/"
+      - name: Create GHCR manifest
+        env:
+          IMAGE: ${{ env.GHCR_IMAGE }}
+          TAGS: ${{ steps.ghcr-meta.outputs.tags }}
+          DIGEST_DIR: ${{ runner.temp }}/digests
+        run: |
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && tag_args+=("-t" "$tag")
+          done <<< "$TAGS"
+
+          digest_args=()
+          for digest in "$DIGEST_DIR"/*; do
+            digest_args+=("$IMAGE@sha256:$(basename "$digest")")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${digest_args[@]}"
